@@ -20,4 +20,4 @@ import check_growth
 if __name__ == '__main__':
     args_dict = check_growth.parse_command_line()
 
-    main(**args_dict)
+    check_growth.main(**args_dict)
