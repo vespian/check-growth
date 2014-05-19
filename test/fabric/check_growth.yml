@@ -1,0 +1,21 @@
+---
+lockfile: /tmp/check-growth.lock
+history_file: /tmp/check_growth.status.yml
+
+#Units of days
+timeframe: 365
+max_averaging_window: 3
+min_averaging_window: 1.5
+
+memory_mon_enabled: true
+#Percentage:
+memory_mon_warn_reduction: 20
+memory_mon_crit_reduction: 40
+
+disk_mon_enabled: true
+disk_mountpoints:
+ - /dev/shm/
+ - /tmp/
+#Percentage:
+disk_mon_warn_reduction: 20
+disk_mon_crit_reduction: 40

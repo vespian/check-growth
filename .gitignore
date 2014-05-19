@@ -1,0 +1,7 @@
+build/*
+check_growth.egg-info/*
+debian/check-growth.*
+debian/check-growth/
+debian/files
+*.swp
+*.swo

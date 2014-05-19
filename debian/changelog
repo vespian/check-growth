@@ -1,0 +1,47 @@
+check-growth (1.2.0) unstable; urgency=low
+
+  * Fix logic error in how current space usage is gathered
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:29:21 -0500
+
+check-growth (1.1.0) unstable; urgency=low
+
+  * Final version
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:29:21 -0500
+
+check-growth (1.0.5) unstable; urgency=low
+
+  * lorem ipsum
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:29:21 -0500
+
+check-growth (1.0.4) unstable; urgency=low
+
+  * more fixes!
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:29:21 -0500
+
+check-growth (1.0.3) unstable; urgency=low
+
+  * typo
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:29:21 -0500
+
+check-growth (1.0.2) unstable; urgency=low
+
+  * more fixes
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:29:21 -0500
+
+check-growth (1.0.1) unstable; urgency=low
+
+  * various fixes
+
+ -- root <root@debian02.tr.mop.vespian.net>  Tue, 11 Feb 2014 11:25:20 -0500
+
+check-growth (1.0.0) unstable; urgency=low
+
+  * Initial release.
+
+ -- Pawel Rozlach <pawel.rozlach@zadane.pl>  Mon, 10 Dec 2013 10:33:43 +0000

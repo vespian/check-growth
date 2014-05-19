@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+
+%:
+	dh $@ --with python3
+
+override_dh_auto_install:
+	python3 setup.py install --root=debian/check-growth --install-layout=deb --install-scripts=/usr/lib/nagios/plugins/
+	install -d debian/check-growth/usr/share/doc/check-growth/
+	install -m 644 doc/* debian/check-growth/usr/share/doc/check-growth/
+override_dh_auto_build:
+
