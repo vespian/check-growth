@@ -5,3 +5,4 @@ debian/check-growth/
 debian/files
 *.swp
 *.swo
+*.pyc
