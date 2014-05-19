@@ -69,6 +69,16 @@ class HistoryFile():
                         if x > averaging_border}
 
     @classmethod
+    def _verify_resource_types(cls, prefix=None, path=None, data_type=None):
+        if prefix is None or prefix not in ['disk', 'memory']:
+            raise ValueError('Not supported prefix during datapoint addition')
+        if prefix == 'disk':
+            if path is None or not os.path.exists(path) or \
+                    data_type not in ['inode', 'space']:
+                raise ValueError('data_type and path params are required for' +
+                                 ' "disk" prefix')
+
+    @classmethod
     def init(cls, location, max_averaging_window, min_averaging_window):
         """
         Initialize HistoryFIle class.
@@ -117,11 +127,8 @@ class HistoryFile():
         Raises:
             ValueError: input data is invalid
         """
-        if prefix not in cls._data['datapoints'].keys():
-            raise ValueError('Not supported prefix during datapoint addition')
-        if prefix == 'disk' and (path is None or data_type is None):
-            raise ValueError('data_type and path params are required for' +
-                             ' "disk" prefix')
+        cls._verify_resource_types(prefix, path, data_type)
+        float(datapoint)
         cur_time = round(time.time())
         if prefix == 'memory':
             cls._data['datapoints'][prefix][cur_time] = datapoint
@@ -150,9 +157,7 @@ class HistoryFile():
             Difference expressed in number of days. If it is negative then
             there is not enough data to process.
         """
-        if prefix not in cls._data['datapoints'].keys():
-            raise ValueError('Not supported prefix during data timespan' +
-                             'calculation')
+        cls._verify_resource_types(prefix, path, data_type)
         dataspan = cls.get_dataspan(prefix, path, data_type)
         return (dataspan - cls._min_averaging_window)
 
@@ -170,12 +175,7 @@ class HistoryFile():
         Returns:
             Data span for given rousource type expressed in days.
         """
-        if prefix not in cls._data['datapoints'].keys():
-            raise ValueError('Not supported prefix during data timespan' +
-                             'calculation')
-        if prefix == 'disk' and (path is None or data_type is None):
-            raise ValueError('data_type and path params are required for' +
-                             ' "disk" prefix')
+        cls._verify_resource_types(prefix, path, data_type)
         if prefix == 'memory':
             timestamps = cls._data['datapoints'][prefix].keys()
         else:
@@ -202,11 +202,7 @@ class HistoryFile():
         Raises:
             ValueError: input data is invalid
         """
-        if prefix not in cls._data['datapoints'].keys():
-            raise ValueError('Not supported prefix during datapoint addition')
-        if prefix == 'disk' and (path is None or data_type is None):
-            raise ValueError('data_type and path params are required for' +
-                             ' "disk" prefix')
+        cls._verify_resource_types(prefix, path, data_type)
         cls._remove_old_datapoints()
         if prefix == 'disk':
             datapoints = cls._data['datapoints'][prefix][path][data_type]
