@@ -20,7 +20,6 @@ import os
 import subprocess
 import sys
 import unittest
-import yaml
 
 # To perform local imports first we need to fix PYTHONPATH:
 pwd = os.path.abspath(os.path.dirname(__file__))
@@ -351,7 +350,7 @@ class TestCheckGrowth(unittest.TestCase):
         min_averaging_window = conf_file("min_averaging_window")
         history_file = conf_file("history_file")
 
-        #Initialize the class:
+        # Initialize the class:
         check_growth.HistoryFile.init(history_file, max_averaging_window,
                                       min_averaging_window)
 
@@ -365,22 +364,29 @@ class TestCheckGrowth(unittest.TestCase):
         # add_datapoint - disk resource type should be defined:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.add_datapoint(prefix='disk',
-                    path='/dev/shm', datapoint=10)
+                                                   path='/dev/shm',
+                                                   datapoint=10)
 
         # add_datapoint - disk resource path should be valid:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.add_datapoint(prefix='disk',
-                    path='no-a-path', datapoint=10, data_type='inode')
+                                                   path='no-a-path',
+                                                   datapoint=10,
+                                                   data_type='inode')
 
         # add_datapoint - disk resource type should be valid
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.add_datapoint(prefix='disk',
-                    path='/dev/shm', datapoint=10, data_type='fooBar')
+                                                   path='/dev/shm',
+                                                   datapoint=10,
+                                                   data_type='fooBar')
 
         # add_datapoint - datapoint should be a float or int object
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.add_datapoint(prefix='disk',
-                    path='/dev/shm', datapoint='foo', data_type='inode')
+                                                   path='/dev/shm',
+                                                   datapoint='foo',
+                                                   data_type='inode')
 
         # verify_dataspan - only memory and disk datatypes are permitted:
         with self.assertRaises(ValueError):
@@ -389,17 +395,19 @@ class TestCheckGrowth(unittest.TestCase):
         # verify_dataspan - disk resource type should be defined:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.verify_dataspan(prefix='disk',
-                    path='/dev/shm')
+                                                     path='/dev/shm')
 
         # verify_dataspan - disk resource path should be valid:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.verify_dataspan(prefix='disk',
-                    path='no-a-path', data_type='inode')
+                                                     path='no-a-path',
+                                                     data_type='inode')
 
         # verify_dataspan - disk resource type should be valid
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.verify_dataspan(prefix='disk',
-                    path='/dev/shm', data_type='fooBar')
+                                                     path='/dev/shm',
+                                                     data_type='fooBar')
 
         # get_dataspan - only memory and disk datatypes are permitted:
         with self.assertRaises(ValueError):
@@ -408,17 +416,19 @@ class TestCheckGrowth(unittest.TestCase):
         # get_dataspan - disk resource type should be defined:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.get_dataspan(prefix='disk',
-                    path='/dev/shm')
+                                                  path='/dev/shm')
 
         # get_dataspan - disk resource path should be valid:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.get_dataspan(prefix='disk',
-                    path='no-a-path', data_type='inode')
+                                                  path='no-a-path',
+                                                  data_type='inode')
 
         # get_dataspan - disk resource type should be valid
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.get_dataspan(prefix='disk',
-                    path='/dev/shm', data_type='fooBar')
+                                                  path='/dev/shm',
+                                                  data_type='fooBar')
 
         # get_datapoints - only memory and disk datatypes are permitted:
         with self.assertRaises(ValueError):
@@ -427,18 +437,19 @@ class TestCheckGrowth(unittest.TestCase):
         # get_datapoints - disk resource type should be defined:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.get_datapoints(prefix='disk',
-                    path='/dev/shm')
+                                                    path='/dev/shm')
 
         # get_datapoints - disk resource path should be valid:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.get_datapoints(prefix='disk',
-                    path='no-a-path', data_type='inode')
+                                                    path='no-a-path',
+                                                    data_type='inode')
 
         # get_datapoints - disk resource type should be valid
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.get_datapoints(prefix='disk',
-                    path='/dev/shm', data_type='fooBar')
-
+                                                    path='/dev/shm',
+                                                    data_type='fooBar')
 
     @mock.patch('time.time')
     def test_histfile_timespan_calculation(self, TimeMock):
@@ -460,7 +471,7 @@ class TestCheckGrowth(unittest.TestCase):
         check_growth.HistoryFile.add_datapoint('disk', 1, path='/tmp/',
                                                data_type='space')
 
-        #Now - move the clock 24h ahead:
+        # Now - move the clock 24h ahead:
         TimeMock.side_effect = lambda: cur_time + 1 * 3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 2)
@@ -470,10 +481,12 @@ class TestCheckGrowth(unittest.TestCase):
                                                data_type='space')
 
         dataspan_memory = check_growth.HistoryFile.get_dataspan('memory')
-        dataspan_disk_i = check_growth.HistoryFile.get_dataspan(
-                'disk', '/tmp/', 'inode')
-        dataspan_disk_s = check_growth.HistoryFile.get_dataspan(
-                'disk', '/tmp/', 'space')
+        dataspan_disk_i = check_growth.HistoryFile.get_dataspan('disk',
+                                                                '/tmp/',
+                                                                'inode')
+        dataspan_disk_s = check_growth.HistoryFile.get_dataspan('disk',
+                                                                '/tmp/',
+                                                                'space')
 
         self.assertEqual(dataspan_memory, 1)
         self.assertEqual(dataspan_disk_i, 1)
@@ -485,9 +498,9 @@ class TestCheckGrowth(unittest.TestCase):
         self.assertLess(check_growth.HistoryFile.verify_dataspan(
             'disk', '/tmp/', 'space'), 0)
 
-        #Now move the clock enough to cover min_averaging_window:
+        # Now move the clock enough to cover min_averaging_window:
         TimeMock.side_effect = lambda: cur_time + \
-                (0.1 + min_averaging_window ) * 3600 * 24 + 1
+            (0.1 + min_averaging_window) * 3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 3)
         check_growth.HistoryFile.add_datapoint('disk', 3, path='/tmp/',
@@ -497,9 +510,9 @@ class TestCheckGrowth(unittest.TestCase):
 
         dataspan_memory = check_growth.HistoryFile.get_dataspan('memory')
         dataspan_disk_i = check_growth.HistoryFile.get_dataspan(
-                'disk', '/tmp/', 'inode')
+            'disk', '/tmp/', 'inode')
         dataspan_disk_s = check_growth.HistoryFile.get_dataspan(
-                'disk', '/tmp/', 'space')
+            'disk', '/tmp/', 'space')
 
         self.assertEqual(dataspan_memory, min_averaging_window + 0.1)
         self.assertEqual(dataspan_disk_i, min_averaging_window + 0.1)
@@ -510,7 +523,6 @@ class TestCheckGrowth(unittest.TestCase):
             'disk', '/tmp/', 'inode'), 0)
         self.assertGreater(check_growth.HistoryFile.verify_dataspan(
             'disk', '/tmp/', 'space'), 0)
-
 
     @mock.patch('time.time')
     def test_histfile_workflow(self, TimeMock):
