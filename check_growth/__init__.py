@@ -32,16 +32,28 @@ CONFIGFILE_LOCATION = './'+os.path.basename(__file__)+'.conf'
 
 
 class HistoryFile():
+    """
+    Abstraction of all the operations on historical datapoints
+
+    This class takes care of storing, retreiving, and trimming of historical
+    datapoints, plus some additionall syntax checking.
+
+    Attributes:
+        _data: a nested hash with the data itself
+        _location: location of the file where data is stored betwean script runs
+        _max_averaging_window: please see class's init() method
+        _min_averaging_window: please see class's init() method
+    """
     _data = {}
     _location = None
-    _timestamp = None
     _max_averaging_window = None
     _min_averaging_window = None
 
     @classmethod
     def _remove_old_datapoints(cls):
         """
-        Remove from lists all datapoints older than _max_averaging_window
+        Remove all the datapoints older than cls._max_averaging_window from
+        the internal storage.
         """
         cur_time = time.time()
         averaging_border = cur_time - cls._max_averaging_window * 3600 * 24
@@ -59,7 +71,19 @@ class HistoryFile():
     @classmethod
     def init(cls, location, max_averaging_window, min_averaging_window):
         """
-        Either fetch stored datapoints list or create empty ones.
+        Initialize HistoryFIle class.
+
+        Class either fetches stored datapoints from the file or creates empty
+        storage. It takes care of setting some internal fields as well.
+
+        Args:
+            location: location of the file where data is stored or should be
+                stored. File is in YAML format.
+            max_averaging_window: maximum time span betwean the oldest and newest
+                datapoint. Points older that this are removed and are no longer
+                taken into consideration.
+            min_averaging_window: minimum time span betwean the oldest and newest
+                datapoint which permits calculation of the growth ratio.
         """
         cls._max_averaging_window = max_averaging_window
         cls._min_averaging_window = min_averaging_window
@@ -76,10 +100,22 @@ class HistoryFile():
     @classmethod
     def add_datapoint(cls, prefix, datapoint, path=None, data_type=None):
         """
-        Add datapoint to given prefix (memory/disk/etc...)
-        This method ensures that:
-            - if called multiple times, the datapoint closest to 12pm is kept
-            - timestamp is stored along with the datapoint
+        Add a datapoint to the internal store.
+
+        This method takes care of some simple sanity-checking and addition of
+        the new datapoints.
+
+        Args:
+            prefix: either 'disk' or 'memory' - whether a datapoint is actually
+                a disk usage or memory usage
+            datapoint: current value of the resource
+            path: in case of the 'disk' resource - the path where device
+                relevant to the datapoint is mounted.
+            data_type: in case of the 'disk' respource - whether it is an inode
+                usage or disk space usage
+
+        Raises:
+            ValueError: input data is invalid
         """
         if prefix not in cls._data['datapoints'].keys():
             raise ValueError('Not supported prefix during datapoint addition')
@@ -99,8 +135,20 @@ class HistoryFile():
     @classmethod
     def verify_dataspan(cls, prefix, path=None, data_type=None):
         """
-        Return the difference between our current dataspan for given previx and
-        the min_averaging_window.
+        Check whether we have enough data to calculate growth ratio.
+
+        This method calculates the difference between current timespan for
+        the given resource (memory or disk-inode or disk-space) and the
+        min_averaging_window.
+
+        Args:
+            prefix: same as for add_datapoint() method
+            path: same as for add_datapoint() method
+            data_type: same as for add_datapoint() method
+
+        Returns:
+            Difference expressed in number of days. If it is negative then
+            there is not enough data to process.
         """
         if prefix not in cls._data['datapoints'].keys():
             raise ValueError('Not supported prefix during data timespan' +
@@ -113,6 +161,14 @@ class HistoryFile():
         """
         Return the difference (in days) betwean oldest and latest data sample
         for given reource type
+
+        Args:
+            prefix: same as for add_datapoint() method
+            path: same as for add_datapoint() method
+            data_type: same as for add_datapoint() method
+
+        Returns:
+            Data span for given rousource type expressed in days.
         """
         if prefix not in cls._data['datapoints'].keys():
             raise ValueError('Not supported prefix during data timespan' +
@@ -130,13 +186,21 @@ class HistoryFile():
     @classmethod
     def get_datapoints(cls, prefix, path=None, data_type=None):
         """
-        Get all datapoints for given prefix (memory/disk/etc...)
-        This method ensures that:
-            - a list is returned for all datapoints not older than averaging
-              window
-            - currently there are only two prefixes supported:
-              * memory
-              * disk
+        Get all datapoints for given data type.
+
+        This method ensures that all datapoints not older than averaging
+        window are returned for the given resource type.
+
+        Args:
+            prefix: same as for add_datapoint() method
+            path: same as for add_datapoint() method
+            data_type: same as for add_datapoint() method
+
+        Returns:
+            A dictionary with timestamps as keys and resource usages as values.
+
+        Raises:
+            ValueError: input data is invalid
         """
         if prefix not in cls._data['datapoints'].keys():
             raise ValueError('Not supported prefix during datapoint addition')
@@ -153,7 +217,7 @@ class HistoryFile():
     @classmethod
     def clear_history(cls):
         """
-        Clear datapoints history (i.e. because it got distored by some failure)
+        Remove all datapoints.
         """
         for res_type in cls._data['datapoints'].keys():
             cls._data['datapoints'][res_type] = dict()
@@ -161,8 +225,11 @@ class HistoryFile():
     @classmethod
     def save(cls):
         """
-        Save all the datapoints not older than
-        (max_averaging_window - 1) * 3600 * 24 seconds
+        Save all the datapoints.
+
+        This method saves all datapoints not older than
+        (max_averaging_window - 1) * 3600 * 24 seconds to the the file provided
+        in init() call.
         """
         cls._remove_old_datapoints()
         with open(cls._location, 'w') as fh:
@@ -172,7 +239,10 @@ class HistoryFile():
 
 def fetch_memory_usage():
     """
-    Return memory usage in megabytes and the total memory installed.
+    Fetch current memory usage.
+
+    Returns:
+    A tuple: (memory used, memory total), in megabytes.
     """
     vmem = psutil.virtual_memory()
     return round((vmem[0]-vmem[1])/1024**2, 2), round(vmem[0]/1024**2, 2)
@@ -180,8 +250,14 @@ def fetch_memory_usage():
 
 def fetch_disk_usage(mountpoint):
     """
-    Return disk usage and the total disk space available (in megabytes) for
-    given mountpoint.
+    Fetch current disk usage.
+
+    Args:
+        mountpoint: path to mountpoint for which current usage data should be
+        fetched.
+
+    Returns:
+    A tuple: (disk usage, total disk space available), in megabytes.
     """
     statvfs = os.statvfs(mountpoint)
     cur_u = round(statvfs.f_frsize * (statvfs.f_blocks-statvfs.f_bavail)/1024**2, 2)
@@ -192,7 +268,14 @@ def fetch_disk_usage(mountpoint):
 
 def fetch_inode_usage(mountpoint):
     """
-    Return inode usage and the number of inodes available for given mountpoint.
+    Fetch current inode usage.
+
+    Args:
+        mountpoint: path to mountpoint for which current usage data should be
+        fetched.
+
+    Returns:
+    A tuple: (inode usage, total inodes available).
     """
     statvfs = os.statvfs(mountpoint)
     cur_u = statvfs.f_files - statvfs.f_ffree
@@ -203,24 +286,41 @@ def fetch_inode_usage(mountpoint):
 
 def find_planned_grow_ratio(cur_usage, max_usage, timeframe):
     """
-    Units-agnostic function used to calculate idea(l resource grow ratio,
+    Calculate 'ideal' growth ratio for a resource.
+
+    Units-agnostic function used to calculate ideal resource grow ratio,
     basing soley on the available resources and given timeframe.
 
-    Return resource-units/day with 2 digit precision.
+    Args:
+        cur_usage: current resource usage
+        max_usage: how much of the resource there is in general
+        timeframe: for how long given resource should be sufficient
+
+    Returns:
+    See below :)
     """
     return round(max_usage/timeframe, 2)
 
 
 def find_current_grow_ratio(datapoints):
     """
-    Units-agnostic function used to calculate current resource grow ratio,
-    basing on the historic data.
+    Find current grow ratio of the resource.
 
-    Keyword arguments:
-    datapoints -- list of tuples, each of them consisting a timestamp and a
-                  value
+    Units-agnostic function which calculates current resource grow ratio,
+    basing on the historic data. This is done using linear regression.
+    Assuming that resource growth during current timeframe can be approximed by
 
-    Returns resource-units/day with 2 digit precision.
+        y = ax + b
+
+    then y is current usage, a is current growth ratio and b is usage generated
+    earlier, before the begining of our time window.
+
+    Args:
+    datapoints: a dictionary with timestamps as keys and resource usages as
+        values.
+
+    Returns:
+        resource-units/day with 2 digit precision.
     """
     sorted_x = sorted(datapoints.keys())
     y = numpy.array([datapoints[x] for x in sorted_x])
@@ -335,6 +435,16 @@ def verify_conf():
 
 
 def main(config_file, std_err=False, verbose=True, clean_histdata=False):
+    """
+    Main function of the script
+
+    Args:
+        config_file: file path of the config file to load
+        std_err: whether print logging output to stderr
+        verbose: whether to provide verbose logging messages
+        clean_histdata: all historical data should be cleared
+    """
+
     try:
         # Configure logging:
         fmt = logging.Formatter('%(filename)s[%(process)d] %(levelname)s: ' +
@@ -397,8 +507,10 @@ def main(config_file, std_err=False, verbose=True, clean_histdata=False):
         # solution :(
         def do_status_processing(prefix, current_growth, planned_growth,
                                  mountpoint=None, data_type=None):
-            warn_tresh = 1 + (ScriptConfiguration.get_val(prefix + '_mon_warn_reduction')/100)
-            crit_tresh = 1 + (ScriptConfiguration.get_val(prefix + '_mon_crit_reduction')/100)
+            warn_tresh = 1 + (ScriptConfiguration.get_val(
+                prefix + '_mon_warn_reduction')/100)
+            crit_tresh = 1 + (ScriptConfiguration.get_val(
+                prefix + '_mon_crit_reduction')/100)
 
             if prefix == 'disk' and data_type == 'inode':
                 units = 'inodes/day'
