@@ -181,8 +181,6 @@ class TestCheckGrowth(unittest.TestCase):
         FindInodeUsageMock.side_effect = lambda mountpoint: (2000, 4000)
         FindMemUsageMock.side_effect = lambda: (1000, 2000)
         HistFileMock.get_datapoints.side_effect = dummy_datapoints
-        HistFileMock.verify_dataspan.side_effect = \
-            lambda prefix, path=None, data_type=None: 4
 
         # Test initialization and history cleaning:
         ScriptConfigurationMock.get_val.side_effect = \
@@ -216,6 +214,20 @@ class TestCheckGrowth(unittest.TestCase):
                 # Test memory checks:
                 ScriptConfigurationMock.get_val.side_effect = \
                     self._script_conf_factory(disk_mon_enabled=False)
+
+            # test handling of insufficient data case:
+            HistFileMock.verify_dataspan.side_effect = \
+                lambda prefix, path=None, data_type=None: -1
+
+            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
+
+            status, msg = ScriptStatusMock.update.call_args[0]
+            self.assertEqual(status, 'unknown')
+            ScriptStatusMock.update.reset_mock()
+
+            # restore mock to something valid:
+            HistFileMock.verify_dataspan.side_effect = \
+                lambda prefix, path=None, data_type=None: 4
 
             # Test warning limit:
             FindPlGrowRatMock.side_effect = \
