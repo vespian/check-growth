@@ -325,7 +325,7 @@ class TestCheckGrowth(unittest.TestCase):
         self.assertLessEqual(diff_max, 3)
         self.assertLessEqual(diff_cur, 3)
 
-    def test_planned_growth_ratio_calc(self):
+    def test_growth_ratio_calculation(self):
         result = check_growth.find_planned_grow_ratio(252, 11323, 365)
 
         self.assertTrue(result, 31.02)
@@ -333,15 +333,182 @@ class TestCheckGrowth(unittest.TestCase):
 
         self.assertTrue(result, 5)
 
-    @mock.patch('time.time')
-    def test_histfile(self, TimeMock):
+    def test_histfile_syntax_checking(self):
         conf_file = self._script_conf_factory(disk_mon_enabled=False)
         max_averaging_window = conf_file("max_averaging_window")
         min_averaging_window = conf_file("min_averaging_window")
         history_file = conf_file("history_file")
 
+        #Initialize the class:
+        check_growth.HistoryFile.init(history_file, max_averaging_window,
+                                      min_averaging_window)
+
+        # FIXME - not sure about copypasting, but not sure about breaking the
+        # interface (_verify_resource_types is private) either...
+
+        # add_datapoint - only memory and disk datatypes are permitted:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.add_datapoint('dummy', 10)
+
+        # add_datapoint - disk resource type should be defined:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.add_datapoint(prefix='disk',
+                    path='/dev/shm', datapoint=10)
+
+        # add_datapoint - disk resource path should be valid:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.add_datapoint(prefix='disk',
+                    path='no-a-path', datapoint=10, data_type='inode')
+
+        # add_datapoint - disk resource type should be valid
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.add_datapoint(prefix='disk',
+                    path='/dev/shm', datapoint=10, data_type='fooBar')
+
+        # add_datapoint - datapoint should be a float or int object
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.add_datapoint(prefix='disk',
+                    path='/dev/shm', datapoint='foo', data_type='inode')
+
+        # verify_dataspan - only memory and disk datatypes are permitted:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.verify_dataspan('dummy', 10)
+
+        # verify_dataspan - disk resource type should be defined:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.verify_dataspan(prefix='disk',
+                    path='/dev/shm')
+
+        # verify_dataspan - disk resource path should be valid:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.verify_dataspan(prefix='disk',
+                    path='no-a-path', data_type='inode')
+
+        # verify_dataspan - disk resource type should be valid
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.verify_dataspan(prefix='disk',
+                    path='/dev/shm', data_type='fooBar')
+
+        # get_dataspan - only memory and disk datatypes are permitted:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_dataspan('dummy', 10)
+
+        # get_dataspan - disk resource type should be defined:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_dataspan(prefix='disk',
+                    path='/dev/shm')
+
+        # get_dataspan - disk resource path should be valid:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_dataspan(prefix='disk',
+                    path='no-a-path', data_type='inode')
+
+        # get_dataspan - disk resource type should be valid
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_dataspan(prefix='disk',
+                    path='/dev/shm', data_type='fooBar')
+
+        # get_datapoints - only memory and disk datatypes are permitted:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_datapoints('dummy', 10)
+
+        # get_datapoints - disk resource type should be defined:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_datapoints(prefix='disk',
+                    path='/dev/shm')
+
+        # get_datapoints - disk resource path should be valid:
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_datapoints(prefix='disk',
+                    path='no-a-path', data_type='inode')
+
+        # get_datapoints - disk resource type should be valid
+        with self.assertRaises(ValueError):
+            check_growth.HistoryFile.get_datapoints(prefix='disk',
+                    path='/dev/shm', data_type='fooBar')
+
+
+    @mock.patch('time.time')
+    def test_histfile_timespan_calculation(self, TimeMock):
+        conf_file = self._script_conf_factory(disk_mon_enabled=False)
+        max_averaging_window = conf_file("max_averaging_window")
+        min_averaging_window = conf_file("min_averaging_window")
+        history_file = conf_file("history_file")
+        cur_time = 1500000000
+
         # Test creating empty file and adding just one datapoint for each datatype
+        TimeMock.side_effect = lambda: cur_time
+
+        check_growth.HistoryFile.init(history_file, max_averaging_window,
+                                      min_averaging_window)
+
+        check_growth.HistoryFile.add_datapoint('memory', 1)
+        check_growth.HistoryFile.add_datapoint('disk', 1, path='/tmp/',
+                                               data_type='inode')
+        check_growth.HistoryFile.add_datapoint('disk', 1, path='/tmp/',
+                                               data_type='space')
+
+        #Now - move the clock 24h ahead:
+        TimeMock.side_effect = lambda: cur_time + 1 * 3600 * 24 + 1
+
+        check_growth.HistoryFile.add_datapoint('memory', 2)
+        check_growth.HistoryFile.add_datapoint('disk', 2, path='/tmp/',
+                                               data_type='inode')
+        check_growth.HistoryFile.add_datapoint('disk', 2, path='/tmp/',
+                                               data_type='space')
+
+        dataspan_memory = check_growth.HistoryFile.get_dataspan('memory')
+        dataspan_disk_i = check_growth.HistoryFile.get_dataspan(
+                'disk', '/tmp/', 'inode')
+        dataspan_disk_s = check_growth.HistoryFile.get_dataspan(
+                'disk', '/tmp/', 'space')
+
+        self.assertEqual(dataspan_memory, 1)
+        self.assertEqual(dataspan_disk_i, 1)
+        self.assertEqual(dataspan_disk_s, 1)
+
+        self.assertLess(check_growth.HistoryFile.verify_dataspan('memory'), 0)
+        self.assertLess(check_growth.HistoryFile.verify_dataspan(
+            'disk', '/tmp/', 'inode'), 0)
+        self.assertLess(check_growth.HistoryFile.verify_dataspan(
+            'disk', '/tmp/', 'space'), 0)
+
+        #Now move the clock enough to cover min_averaging_window:
+        TimeMock.side_effect = lambda: cur_time + \
+                (0.1 + min_averaging_window ) * 3600 * 24 + 1
+
+        check_growth.HistoryFile.add_datapoint('memory', 3)
+        check_growth.HistoryFile.add_datapoint('disk', 3, path='/tmp/',
+                                               data_type='inode')
+        check_growth.HistoryFile.add_datapoint('disk', 3, path='/tmp/',
+                                               data_type='space')
+
+        dataspan_memory = check_growth.HistoryFile.get_dataspan('memory')
+        dataspan_disk_i = check_growth.HistoryFile.get_dataspan(
+                'disk', '/tmp/', 'inode')
+        dataspan_disk_s = check_growth.HistoryFile.get_dataspan(
+                'disk', '/tmp/', 'space')
+
+        self.assertEqual(dataspan_memory, min_averaging_window + 0.1)
+        self.assertEqual(dataspan_disk_i, min_averaging_window + 0.1)
+        self.assertEqual(dataspan_disk_s, min_averaging_window + 0.1)
+
+        self.assertGreater(check_growth.HistoryFile.verify_dataspan('memory'), 0)
+        self.assertGreater(check_growth.HistoryFile.verify_dataspan(
+            'disk', '/tmp/', 'inode'), 0)
+        self.assertGreater(check_growth.HistoryFile.verify_dataspan(
+            'disk', '/tmp/', 'space'), 0)
+
+
+    @mock.patch('time.time')
+    def test_histfile_workflow(self, TimeMock):
+        conf_file = self._script_conf_factory(disk_mon_enabled=False)
+        max_averaging_window = conf_file("max_averaging_window")
+        min_averaging_window = conf_file("min_averaging_window")
+        history_file = conf_file("history_file")
         cur_time = 1000000000
+
+        # Test creating empty file and adding just one datapoint for each datatype
         TimeMock.side_effect = lambda: cur_time
 
         check_growth.HistoryFile.init(history_file, max_averaging_window,
@@ -349,10 +516,6 @@ class TestCheckGrowth(unittest.TestCase):
 
         # Remove old entries:
         check_growth.HistoryFile.clear_history()
-
-        # test adding some wrong datapoint type as well:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.add_datapoint('dummy', 10)
 
         check_growth.HistoryFile.add_datapoint('memory', 10356)
         check_growth.HistoryFile.add_datapoint('disk', 134321, path='/tmp/',
@@ -384,6 +547,8 @@ class TestCheckGrowth(unittest.TestCase):
         check_growth.HistoryFile.add_datapoint('disk', 652314121, path='/tmp/',
                                                data_type='space')
 
+        # Test whether we have new and saved data and that old data got
+        # trimmed:
         memory_data = check_growth.HistoryFile.get_datapoints('memory')
         disk_data_space = check_growth.HistoryFile.get_datapoints('disk',
                                                                   path='/tmp/',
@@ -400,16 +565,6 @@ class TestCheckGrowth(unittest.TestCase):
 
         check_growth.HistoryFile.save()
 
-        with open(history_file, 'r') as fh:
-            data = yaml.load(fh)
-            self.assertEqual(data['datapoints'], {
-                'disk': {'/tmp/': {
-                         'inode': {1001209601: 234321, 1001296000: 234234367},
-                         'space': {1001209601: 654334321, 1001296000: 652314121}
-                         }
-                         },
-                'memory': {1001296000: 575553, 1001209601: 234453}
-            })
 
 if __name__ == '__main__':
     unittest.main()
