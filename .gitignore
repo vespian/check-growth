@@ -6,3 +6,4 @@ debian/files
 *.swp
 *.swo
 *.pyc
+.pybuild/*
