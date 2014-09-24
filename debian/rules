@@ -1,11 +1,13 @@
 #!/usr/bin/make -f
 
-%:
-	dh $@ --with python3
+#export DH_VERBOSE=1
+export PYBUILD_NAME=check-growth
 
-override_dh_auto_install:
-	python3 setup.py install --root=debian/check-growth --install-layout=deb --install-scripts=/usr/lib/nagios/plugins/
-	install -d debian/check-growth/usr/share/doc/check-growth/
-	install -m 644 doc/* debian/check-growth/usr/share/doc/check-growth/
-override_dh_auto_build:
+%:
+	dh $@ --with python3 --buildsystem=pybuild
+
+override_dh_auto_test:
+	PYBUILD_SYSTEM=custom \
+	PYBUILD_TEST_ARGS="nosetests3 {dir}/" dh_auto_test
+
 

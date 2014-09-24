@@ -1,12 +1,15 @@
 Source: check-growth
-Section: main/net
+Section: utils
 Priority: extra
-Maintainer: Pawel Rozlach <pawel.rozlach@zadane.pl>
-Build-Depends: python3 (>= 3.1), debhelper (>= 8)
-Standards-Version: 3.9.3
+Maintainer: Pawel Rozlach <pawel.rozlach@brainly.com>
+Build-Depends: debhelper (>= 8), python3-all (>= 3.1), python3-setuptools,
+    dh-python, python3-mock, python3-numpy, python3-psutil (>=2.1.1),
+    python3-pymisc
+Standards-Version: 3.9.4
 X-Python-Version: >= 3.1
 
 Package: check-growth
 Architecture: any
-Depends: ${python:Depends}, python3-psutil, python3-yaml
+Depends: ${python:Depends}, ${misc:Depends}, python3-psutil (>=2.1.1-1),
+    python3-yaml, python3-numpy, python3-pymisc, python3 (>=3.2)
 Description: Simple resources check
