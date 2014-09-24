@@ -13,7 +13,10 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-import coverage
+try:
+    import coverage
+except ImportError:
+    pass
 import sys
 import unittest
 import os
@@ -29,17 +32,19 @@ def main():
             shutil.rmtree(os.path.join(root, d))
 
     #Perform coverage analisys:
-    cov = coverage.coverage()
+    if "coverage" in sys.modules:
+        cov = coverage.coverage()
+        cov.start()
 
-    cov.start()
     #Discover the tests and execute them:
     loader = unittest.TestLoader()
     tests = loader.discover('./test/')
     testRunner = unittest.runner.TextTestRunner(descriptions=True, verbosity=1)
     testRunner.run(tests)
-    cov.stop()
 
-    cov.html_report()
+    if "coverage" in sys.modules:
+        cov.stop()
+        cov.html_report()
 
 if __name__ == '__main__':
     main()
