@@ -8,5 +8,5 @@ X-Python-Version: >= 3.1
 
 Package: check-growth
 Architecture: any
-Depends: ${python:Depends}, python3-argparse, python3-psutil, python3-yaml
+Depends: ${python:Depends}, python3-psutil, python3-yaml
 Description: Simple resources check
