@@ -29,6 +29,8 @@ sys.path.append(os.path.abspath(pwd + '/../../modules/'))
 import file_paths as paths
 import check_growth
 
+# Constants:
+DF_COMMAND='/bin/df' # FIXME - should be autodetected
 
 class TestCheckGrowth(unittest.TestCase):
 
@@ -304,7 +306,7 @@ class TestCheckGrowth(unittest.TestCase):
         cur_inode = int(cur_inode)
         max_inode = int(max_inode)
 
-        output = subprocess.check_output(['/usr/bin/df', '-i',
+        output = subprocess.check_output([DF_COMMAND, '-i',
                                          paths.MOUNTPOINT_DIRS[0]],
                                          shell=False,
                                          universal_newlines=True).split('\n')
@@ -321,7 +323,7 @@ class TestCheckGrowth(unittest.TestCase):
         cur_disk = int(cur_disk)
         max_disk = int(max_disk)
 
-        output = subprocess.check_output(['/usr/bin/df', '-m',
+        output = subprocess.check_output([DF_COMMAND, '-m',
                                          paths.MOUNTPOINT_DIRS[0]],
                                          shell=False,
                                          universal_newlines=True).split('\n')
