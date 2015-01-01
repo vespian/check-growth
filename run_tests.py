@@ -40,11 +40,16 @@ def main():
     loader = unittest.TestLoader()
     tests = loader.discover('./test/')
     testRunner = unittest.runner.TextTestRunner(descriptions=True, verbosity=1)
-    testRunner.run(tests)
+    res = testRunner.run(tests)
 
     if "coverage" in sys.modules:
         cov.stop()
         cov.html_report()
+
+    if res.wasSuccessful():
+        sys.exit(0)
+    else:
+        sys.exit(1)
 
 if __name__ == '__main__':
     main()
