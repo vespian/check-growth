@@ -289,7 +289,7 @@ class TestCheckGrowth(unittest.TestCase):
                                          universal_newlines=True).split('\n')
 
         correct_maxmem = int(output[1].split()[1])
-        correct_curmem = int(output[2].split()[2])
+        correct_curmem = int(output[1].split()[2])
 
         diff_max = abs(correct_maxmem - max_mem)
         diff_cur = abs(correct_curmem - cur_mem)
