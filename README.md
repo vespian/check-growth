@@ -1,5 +1,8 @@
 # _check_growth_
 
+[![Build
+Status](https://travis-ci.org/vespian/check-growth.svg?branch=master)](https://travis-ci.org/vespian/check-growth)
+
 _check_growth is a check which can determine whether resource usage is growing
 to quickly (both RAM and DISK), and send the data to the monitoring system
 using pymisc library._
