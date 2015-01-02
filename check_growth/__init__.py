@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# Copyright (c) 2015 Pawel Rozlach
 # Copyright (c) 2014 Pawel Rozlach
 # Copyright (c) 2014 Zadane.pl sp. z o.o.
 #

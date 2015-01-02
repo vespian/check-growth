@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-# Copyright (c) 2014 Zadane.pl sp. z o.o.
+# Copyright (c) 2015 Pawel Rozlach
+# Copyright (c) 2014 Pawel Rozlach
+# Copyright (c) 2014 Brainly.com sp. z o.o.
 # Copyright (c) 2013 Spotify AB
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not
@@ -15,11 +17,14 @@
 # the License.
 
 # Global imports:
+import ddt
 import mock
 import os
 import subprocess
 import sys
 import unittest
+
+from ddt import ddt, data
 
 # To perform local imports first we need to fix PYTHONPATH:
 pwd = os.path.abspath(os.path.dirname(__file__))
@@ -30,9 +35,10 @@ import file_paths as paths
 import check_growth
 
 # Constants:
-DF_COMMAND='/bin/df' # FIXME - should be autodetected
+DF_COMMAND = '/bin/df'  # FIXME - should be autodetected
 
-class TestCheckGrowth(unittest.TestCase):
+
+class TestsBaseClass(unittest.TestCase):
 
     # Used by side effects:
     @staticmethod
@@ -65,11 +71,16 @@ class TestCheckGrowth(unittest.TestCase):
 
         return func
 
-    @mock.patch('sys.exit')
-    def test_command_line_parsing(self, SysExitMock):
-        old_args = sys.argv
 
-        # General parsing:
+@mock.patch('sys.exit')
+class TestCommandLineParsing(unittest.TestCase):
+    def setUp(self):
+        self._old_args = sys.argv
+
+    def tearDown(self):
+        sys.argv = self._old_args
+
+    def test_proper_command_line_parsing(self, *unused):
         sys.argv = ['./check_growth.py', '-v', '-s', '-c', './check_growth.json']
         parsed_cmdline = check_growth.parse_command_line()
         self.assertEqual(parsed_cmdline, {'std_err': True,
@@ -78,14 +89,14 @@ class TestCheckGrowth(unittest.TestCase):
                                           'clean_histdata': False,
                                           })
 
-        # Config file should be a mandatory argument:
+    def test_config_file_missing_from_commandline(self, SysExitMock):
         sys.argv = ['./check_growth.py', ]
         # Suppres warnings from argparse
         with mock.patch('sys.stderr'):
-            parsed_cmdline = check_growth.parse_command_line()
+            check_growth.parse_command_line()
         SysExitMock.assert_called_once_with(2)
 
-        # Test default values:
+    def test_default_command_line_args(self, *unused):
         sys.argv = ['./check_growth.py', '-c', './check_growth.json']
         parsed_cmdline = check_growth.parse_command_line()
         self.assertEqual(parsed_cmdline, {'std_err': False,
@@ -94,197 +105,14 @@ class TestCheckGrowth(unittest.TestCase):
                                           'clean_histdata': False,
                                           })
 
-        sys.argv = old_args
 
-    @mock.patch('check_growth.ScriptConfiguration')
-    @mock.patch('check_growth.ScriptStatus')
-    def test_config_verification(self, ScriptStatusMock, ScriptConfigurationMock):
-        ScriptStatusMock.notify_immediate.side_effect = self._terminate_script
-
-        # Check if values are checked for being greater than 0:
-        ScriptConfigurationMock.get_val.side_effect = \
-            self._script_conf_factory(timeframe=-7,
-                                      max_averaging_window=-3,
-                                      memory_mon_warn_reduction=-10,
-                                      memory_mon_crit_reduction=-100,
-                                      disk_mon_warn_reduction=0,
-                                      disk_mon_crit_reduction=-5)
-        with self.assertRaises(SystemExit):
-            check_growth.verify_conf()
-        status, msg = ScriptStatusMock.notify_immediate.call_args[0]
-        self.assertEqual(status, 'unknown')
-        self.assertIn('Timeframe should be a positive int', msg)
-        self.assertIn('Max averaging window should be a positive int', msg)
-        self.assertIn('memory_mon_warn_reduction should be a positive int', msg)
-        self.assertIn('memory_mon_crit_reduction should be a positive int', msg)
-        self.assertIn('disk_mon_warn_reduction should be a positive int', msg)
-        self.assertIn('disk_mon_crit_reduction should be a positive int', msg)
-
-        # Check if limits are sane:
-        ScriptConfigurationMock.get_val.side_effect = \
-            self._script_conf_factory(memory_mon_warn_reduction=30,
-                                      memory_mon_crit_reduction=20,
-                                      disk_mon_warn_reduction=10,
-                                      disk_mon_crit_reduction=5)
-        with self.assertRaises(SystemExit):
-            check_growth.verify_conf()
-        status, msg = ScriptStatusMock.notify_immediate.call_args[0]
-        self.assertEqual(status, 'unknown')
-        self.assertIn('memory_mon_warn_reduction should be lower ' +
-                      'than memory_mon_crit_reduction', msg)
-        self.assertIn('disk_mon_warn_reduction should be lower than ' +
-                      'disk_mon_crit_reduction', msg)
-
-        # Check checking if at least one check type is enabled:
-        ScriptConfigurationMock.get_val.side_effect = \
-            self._script_conf_factory(memory_mon_enabled=False,
-                                      disk_mon_enabled=False,)
-        with self.assertRaises(SystemExit):
-            check_growth.verify_conf()
-        status, msg = ScriptStatusMock.notify_immediate.call_args[0]
-        self.assertEqual(status, 'unknown')
-        self.assertIn('There should be at least one resourece check enabled.',
-                      msg)
-
-        # Check if good configuration is accepted:
-        ScriptConfigurationMock.get_val.side_effect = \
-            self._script_conf_factory(disk_mountpoints=paths.MOUNTPOINT_DIRS)
-        check_growth.verify_conf()
-
-    @mock.patch('check_growth.fetch_inode_usage')
-    @mock.patch('check_growth.fetch_disk_usage')
-    @mock.patch('check_growth.fetch_memory_usage')
-    @mock.patch('check_growth.find_planned_grow_ratio')
-    @mock.patch('check_growth.find_current_grow_ratio')
-    @mock.patch('check_growth.HistoryFile')
-    @mock.patch('check_growth.sys.exit')
-    @mock.patch('check_growth.ScriptLock')
-    @mock.patch('check_growth.ScriptStatus')
-    @mock.patch('check_growth.verify_conf')
-    @mock.patch('check_growth.ScriptConfiguration')
-    @mock.patch('check_growth.logging')
-    def test_script_logic(self, LoggingMock, ScriptConfigurationMock,
-                          VerifyConfMock, ScriptStatusMock, ScriptLockMock,
-                          SysExitMock, HistFileMock, FindCurGrowRatMock,
-                          FindPlGrowRatMock, FindMemUsageMock,
-                          FindDiskUsageMock, FindInodeUsageMock):
-        # Set up phase
-        ScriptStatusMock.notify_immediate.side_effect = self._terminate_script
-
-        def dummy_datapoints(dtype, path=None, data_type=None):
-            if dtype in ('memory', 'disk'):
-                return (1212, 1232, 500, 1563)
-            else:
-                self.fail("Unsupported datapoints type requested: {0}.".format(
-                          dtype))
-
-        FindDiskUsageMock.side_effect = lambda mountpoint: (1000, 2000)
-        FindInodeUsageMock.side_effect = lambda mountpoint: (2000, 4000)
-        FindMemUsageMock.side_effect = lambda: (1000, 2000)
-        HistFileMock.get_datapoints.side_effect = dummy_datapoints
-
-        # Test initialization and history cleaning:
-        ScriptConfigurationMock.get_val.side_effect = \
-            self._script_conf_factory(memory_mon_warn_reduction=30,
-                                      memory_mon_crit_reduction=20,
-                                      disk_mon_warn_reduction=10,
-                                      disk_mon_crit_reduction=5)
-        with self.assertRaises(SystemExit):
-            check_growth.main(config_file=paths.TEST_CONFIG_FILE,
-                              clean_histdata=True)
-
-        ScriptConfigurationMock.load_config.assert_called_once_with(
-            paths.TEST_CONFIG_FILE)
-        ScriptLockMock.init.assert_called_once_with(paths.TEST_LOCKFILE)
-        self.assertTrue(ScriptStatusMock.init.called)
-        self.assertTrue(ScriptLockMock.aqquire.called)
-        self.assertTrue(VerifyConfMock.called)
-        HistFileMock.init.assert_called_once_with(location=paths.TEST_STATUSFILE,
-                                                  max_averaging_window=14,
-                                                  min_averaging_window=7)
-        self.assertTrue(HistFileMock.clear_history.called)
-        self.assertTrue(HistFileMock.save.called)
-
-        for prefix in ('disk', 'memory'):
-            if prefix == 'disk':
-                # Test memory checks:
-                ScriptConfigurationMock.get_val.side_effect = \
-                    self._script_conf_factory(memory_mon_enabled=False,
-                                              disk_mountpoints=['/tmp/'])
-            elif prefix == 'memory':
-                # Test memory checks:
-                ScriptConfigurationMock.get_val.side_effect = \
-                    self._script_conf_factory(disk_mon_enabled=False)
-
-            # test handling of insufficient data case:
-            HistFileMock.verify_dataspan.side_effect = \
-                lambda prefix, path=None, data_type=None: -1
-
-            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
-
-            status, msg = ScriptStatusMock.update.call_args[0]
-            self.assertEqual(status, 'unknown')
-            ScriptStatusMock.update.reset_mock()
-
-            # restore mock to something valid:
-            HistFileMock.verify_dataspan.side_effect = \
-                lambda prefix, path=None, data_type=None: 4
-
-            # Test warning limit:
-            FindPlGrowRatMock.side_effect = \
-                lambda cur_usage, max_usage, timeframe: 100
-            FindCurGrowRatMock.side_effect = lambda datapoints: 130
-            FindPlGrowRatMock.reset_mock()
-            FindCurGrowRatMock.reset_mock()
-
-            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
-
-            if prefix == 'disk':
-                self.assertEqual(FindPlGrowRatMock.call_args_list,
-                                 [mock.call(1000, 2000, 365),
-                                  mock.call(2000, 4000, 365)])
-                self.assertEqual(FindCurGrowRatMock.call_args_list,
-                                 [mock.call((1212, 1232, 500, 1563), ),
-                                  mock.call((1212, 1232, 500, 1563), )])
-            else:
-                FindPlGrowRatMock.assert_called_with(1000, 2000, 365)
-                FindCurGrowRatMock.assert_called_with((1212, 1232, 500, 1563),)
-            FindPlGrowRatMock.reset_mock()
-            FindCurGrowRatMock.reset_mock()
-
-            status, msg = ScriptStatusMock.update.call_args[0]
-            self.assertEqual(status, 'warn')
-            ScriptStatusMock.update.reset_mock()
-
-            # Test critical limit:
-            FindPlGrowRatMock.side_effect = lambda cur_usage, max_usage, timeframe: 100
-            FindCurGrowRatMock.side_effect = lambda datapoints: 160
-            FindPlGrowRatMock.reset_mock()
-            FindCurGrowRatMock.reset_mock()
-
-            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
-
-            status, msg = ScriptStatusMock.update.call_args[0]
-            self.assertEqual(status, 'crit')
-            ScriptStatusMock.update.reset_mock()
-
-            # Test the case when limits are kept:
-            FindPlGrowRatMock.side_effect = lambda cur_usage, max_usage, timeframe: 100
-            FindCurGrowRatMock.side_effect = lambda datapoints: 60
-            FindPlGrowRatMock.reset_mock()
-            FindCurGrowRatMock.reset_mock()
-
-            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
-
-            status, msg = ScriptStatusMock.update.call_args[0]
-            self.assertEqual(status, 'ok')
-
+class TestSystemMeasurement(unittest.TestCase):
     def test_memusage_fetch(self):
 
         with open(paths.TEST_MEMINFO, 'r') as fh:
             tmp = fh.read()
 
-        m = mock.mock_open(read_data = tmp)
+        m = mock.mock_open(read_data=tmp)
         with mock.patch('check_growth.open', m, create=True):
             cur_mem, max_mem = check_growth.fetch_memory_usage()
 
@@ -338,7 +166,75 @@ class TestCheckGrowth(unittest.TestCase):
 
         self.assertTrue(result, 5)
 
-    def test_histfile_syntax_checking(self):
+
+class TestConfigVerification(TestsBaseClass):
+
+    def setUp(self):
+        self.mocks = {}
+        for patched in ['check_growth.ScriptConfiguration',
+                        'check_growth.ScriptStatus']:
+            patcher = mock.patch(patched)
+            self.mocks[patched] = patcher.start()
+            self.addCleanup(patcher.stop)
+
+        self.mocks['check_growth.ScriptStatus'].notify_immediate.side_effect = \
+            self._terminate_script
+
+    def test_values_greater_than_zero(self):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory(timeframe=-7,
+                                      max_averaging_window=-3,
+                                      memory_mon_warn_reduction=-10,
+                                      memory_mon_crit_reduction=-100,
+                                      disk_mon_warn_reduction=0,
+                                      disk_mon_crit_reduction=-5)
+        with self.assertRaises(SystemExit):
+            check_growth.verify_conf()
+        status, msg = self.mocks['check_growth.ScriptStatus'].notify_immediate.call_args[0]
+        self.assertEqual(status, 'unknown')
+        self.assertIn('Timeframe should be a positive int', msg)
+        self.assertIn('Max averaging window should be a positive int', msg)
+        self.assertIn('memory_mon_warn_reduction should be a positive int', msg)
+        self.assertIn('memory_mon_crit_reduction should be a positive int', msg)
+        self.assertIn('disk_mon_warn_reduction should be a positive int', msg)
+        self.assertIn('disk_mon_crit_reduction should be a positive int', msg)
+
+    def test_limits_sanity(self):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory(memory_mon_warn_reduction=30,
+                                      memory_mon_crit_reduction=20,
+                                      disk_mon_warn_reduction=10,
+                                      disk_mon_crit_reduction=5)
+        with self.assertRaises(SystemExit):
+            check_growth.verify_conf()
+        status, msg = self.mocks['check_growth.ScriptStatus'].notify_immediate.call_args[0]
+        self.assertEqual(status, 'unknown')
+        self.assertIn('memory_mon_warn_reduction should be lower ' +
+                      'than memory_mon_crit_reduction', msg)
+        self.assertIn('disk_mon_warn_reduction should be lower than ' +
+                      'disk_mon_crit_reduction', msg)
+
+    def test_at_least_one_checktype_enabled(self):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory(memory_mon_enabled=False,
+                                      disk_mon_enabled=False,)
+        with self.assertRaises(SystemExit):
+            check_growth.verify_conf()
+        status, msg = self.mocks['check_growth.ScriptStatus'].notify_immediate.call_args[0]
+        self.assertEqual(status, 'unknown')
+        self.assertIn('There should be at least one resourece check enabled.',
+                      msg)
+
+    def test_configuration_ok(self):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory(disk_mountpoints=paths.MOUNTPOINT_DIRS)
+        check_growth.verify_conf()
+
+
+@ddt
+class TestHistFileUpdateMethodsSyntaxChecking(TestsBaseClass):
+
+    def setUp(self):
         conf_file = self._script_conf_factory(disk_mon_enabled=False)
         max_averaging_window = conf_file("max_averaging_window")
         min_averaging_window = conf_file("min_averaging_window")
@@ -348,33 +244,14 @@ class TestCheckGrowth(unittest.TestCase):
         check_growth.HistoryFile.init(history_file, max_averaging_window,
                                       min_averaging_window)
 
-        # FIXME - not sure about copypasting, but not sure about breaking the
-        # interface (_verify_resource_types is private) either...
-
-        # add_datapoint - only memory and disk datatypes are permitted:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.add_datapoint('dummy', 10)
-
+    def test_disk_resource_defined(self):
         # add_datapoint - disk resource type should be defined:
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.add_datapoint(prefix='disk',
                                                    path='/dev/shm',
                                                    datapoint=10)
 
-        # add_datapoint - disk resource path should be valid:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.add_datapoint(prefix='disk',
-                                                   path='no-a-path',
-                                                   datapoint=10,
-                                                   data_type='inode')
-
-        # add_datapoint - disk resource type should be valid
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.add_datapoint(prefix='disk',
-                                                   path='/dev/shm',
-                                                   datapoint=10,
-                                                   data_type='fooBar')
-
+    def test_datapoint_valid_type(self):
         # add_datapoint - datapoint should be a float or int object
         with self.assertRaises(ValueError):
             check_growth.HistoryFile.add_datapoint(prefix='disk',
@@ -382,69 +259,182 @@ class TestCheckGrowth(unittest.TestCase):
                                                    datapoint='foo',
                                                    data_type='inode')
 
-        # verify_dataspan - only memory and disk datatypes are permitted:
+    @data('verify_dataspan', 'get_dataspan', 'get_datapoints')
+    def test_datapoint_type_defined(self, method):
+        args = {'prefix': 'disk',
+                'path': '/dev/shm'}
         with self.assertRaises(ValueError):
-            check_growth.HistoryFile.verify_dataspan('dummy', 10)
+            getattr(check_growth.HistoryFile, method)(**args)
 
-        # verify_dataspan - disk resource type should be defined:
+    @data('add_datapoint', 'verify_dataspan', 'get_dataspan', 'get_datapoints')
+    def test_only_disk_or_memory_permitted(self, method):
         with self.assertRaises(ValueError):
-            check_growth.HistoryFile.verify_dataspan(prefix='disk',
-                                                     path='/dev/shm')
+            getattr(check_growth.HistoryFile, method)('dummy', 10)
 
-        # verify_dataspan - disk resource path should be valid:
+    @data('add_datapoint', 'verify_dataspan', 'get_dataspan', 'get_datapoints')
+    def test_disk_resource_path_valid(self, method):
+        args = {"prefix": 'disk',
+                "path": 'no-a-path',
+                "data_type": 'inode'}
+        if method == 'add_datapoint':
+            args["datapoint"] = 10
         with self.assertRaises(ValueError):
-            check_growth.HistoryFile.verify_dataspan(prefix='disk',
-                                                     path='no-a-path',
-                                                     data_type='inode')
+            getattr(check_growth.HistoryFile, method)(**args)
 
-        # verify_dataspan - disk resource type should be valid
+    @data('add_datapoint', 'verify_dataspan', 'get_dataspan', 'get_datapoints')
+    def test_disk_resource_type_valid(self, method):
+        args = {"prefix": 'disk',
+                "path": '/dev/shm',
+                "data_type": 'fooBar'}
+        if method == 'add_datapoint':
+            args["datapoint"] = 10
         with self.assertRaises(ValueError):
-            check_growth.HistoryFile.verify_dataspan(prefix='disk',
-                                                     path='/dev/shm',
-                                                     data_type='fooBar')
+            getattr(check_growth.HistoryFile, method)(**args)
 
-        # get_dataspan - only memory and disk datatypes are permitted:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_dataspan('dummy', 10)
 
-        # get_dataspan - disk resource type should be defined:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_dataspan(prefix='disk',
-                                                  path='/dev/shm')
+@ddt
+class TestScriptLogic(TestsBaseClass):
 
-        # get_dataspan - disk resource path should be valid:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_dataspan(prefix='disk',
-                                                  path='no-a-path',
-                                                  data_type='inode')
+    def setUp(self):
+        self.mocks = {}
+        for patched in ['check_growth.fetch_inode_usage',
+                        'check_growth.fetch_disk_usage',
+                        'check_growth.fetch_memory_usage',
+                        'check_growth.find_planned_grow_ratio',
+                        'check_growth.find_current_grow_ratio',
+                        'check_growth.HistoryFile',
+                        'check_growth.ScriptLock',
+                        'check_growth.ScriptStatus',
+                        'check_growth.verify_conf',
+                        'check_growth.ScriptConfiguration',
+                        'check_growth.logging',
+                        ]:
+            patcher = mock.patch(patched)
+            self.mocks[patched] = patcher.start()
+            self.addCleanup(patcher.stop)
 
-        # get_dataspan - disk resource type should be valid
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_dataspan(prefix='disk',
-                                                  path='/dev/shm',
-                                                  data_type='fooBar')
+        self.mocks['check_growth.ScriptStatus'].notify_immediate.side_effect = \
+            self._terminate_script
 
-        # get_datapoints - only memory and disk datatypes are permitted:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_datapoints('dummy', 10)
+        self.mocks['check_growth.ScriptStatus'].notify_agregated.side_effect = \
+            self._terminate_script
 
-        # get_datapoints - disk resource type should be defined:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_datapoints(prefix='disk',
-                                                    path='/dev/shm')
+        self.mocks['check_growth.fetch_disk_usage'].return_value = (1000, 2000)
+        self.mocks['check_growth.fetch_inode_usage'].return_value = (2000, 4000)
+        self.mocks['check_growth.fetch_memory_usage'].return_value = (1000, 2000)
+        self.mocks['check_growth.HistoryFile'].verify_dataspan.return_value = 10
+        self.mocks['check_growth.HistoryFile'].get_datapoints.side_effect = \
+            self._dummy_datapoints
+        self.mocks['check_growth.find_planned_grow_ratio'].return_value = 100
+        self.mocks['check_growth.find_current_grow_ratio'].return_value = 60
 
-        # get_datapoints - disk resource path should be valid:
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_datapoints(prefix='disk',
-                                                    path='no-a-path',
-                                                    data_type='inode')
+    @staticmethod
+    def _dummy_datapoints(dtype, path=None, data_type=None):
+        if dtype in ('memory', 'disk'):
+            return (1212, 1232, 500, 1563)
+        else:
+            self.fail("Unsupported datapoints type requested: {0}.".format(
+                        dtype))
 
-        # get_datapoints - disk resource type should be valid
-        with self.assertRaises(ValueError):
-            check_growth.HistoryFile.get_datapoints(prefix='disk',
-                                                    path='/dev/shm',
-                                                    data_type='fooBar')
+    def test_allok(self):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory()
+        with self.assertRaises(SystemExit):
+            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
 
+        # Configuration is loaded:
+        self.mocks['check_growth.ScriptConfiguration'].load_config.assert_called_once_with(
+            paths.TEST_CONFIG_FILE)
+        self.assertTrue(self.mocks['check_growth.verify_conf'].called)
+
+        # Lock is properly handled:
+        self.mocks['check_growth.ScriptLock'].init.assert_called_once_with(
+            paths.TEST_LOCKFILE)
+        self.assertTrue(self.mocks['check_growth.ScriptLock'].aqquire.called)
+
+        # Monitoring is notified:
+        self.assertTrue(self.mocks['check_growth.ScriptStatus'].init.called)
+        self.assertTrue(self.mocks['check_growth.ScriptStatus'].notify_agregated.called)
+
+        # Data is stored:
+        self.mocks['check_growth.HistoryFile'].init.assert_called_once_with(
+            location=paths.TEST_STATUSFILE,
+            max_averaging_window=14,
+            min_averaging_window=7)
+        self.assertTrue(self.mocks['check_growth.HistoryFile'].save.called)
+
+        # Status is OK
+        status, msg = self.mocks['check_growth.ScriptStatus'].update.call_args[0]
+        self.assertEqual(status, 'ok')
+
+    def test_history_cleaning(self):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory()
+        with self.assertRaises(SystemExit):
+            check_growth.main(config_file=paths.TEST_CONFIG_FILE,
+                              clean_histdata=True)
+
+        self.assertTrue(self.mocks['check_growth.HistoryFile'].clear_history.called)
+        self.assertTrue(self.mocks['check_growth.HistoryFile'].save.called)
+
+    @data('disk', 'memory')
+    def test_insufficient_input_data(self, prefix):
+        if prefix == 'disk':
+            # Test memory checks:
+            self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+                self._script_conf_factory(memory_mon_enabled=False,
+                                          disk_mountpoints=['/tmp/'])
+        elif prefix == 'memory':
+            # Test memory checks:
+            self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+                self._script_conf_factory(disk_mon_enabled=False)
+
+        self.mocks['check_growth.HistoryFile'].verify_dataspan.return_value = -1
+
+        with self.assertRaises(SystemExit):
+            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
+
+        status, msg = self.mocks['check_growth.ScriptStatus'].update.call_args[0]
+        self.assertEqual(status, 'unknown')
+
+    @data(("warn", 130), ("crit", 160))
+    def test_disk_alert_condition(self, data):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory(memory_mon_enabled=False,
+                                        disk_mountpoints=['/tmp/'])
+
+        self.mocks['check_growth.find_current_grow_ratio'].return_value = data[1]
+
+        with self.assertRaises(SystemExit):
+            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
+
+        self.assertEqual(self.mocks['check_growth.find_planned_grow_ratio'].call_args_list,
+                            [mock.call(1000, 2000, 365),
+                            mock.call(2000, 4000, 365)])
+        self.assertEqual(self.mocks['check_growth.find_current_grow_ratio'].call_args_list,
+                            [mock.call((1212, 1232, 500, 1563), ),
+                            mock.call((1212, 1232, 500, 1563), )])
+
+        status, msg = self.mocks['check_growth.ScriptStatus'].update.call_args[0]
+        self.assertEqual(status, data[0])
+
+    @data(("warn", 130), ("crit", 160))
+    def test_memory_alert_condition(self, data):
+        self.mocks['check_growth.ScriptConfiguration'].get_val.side_effect = \
+            self._script_conf_factory(disk_mon_enabled=False)
+
+        self.mocks['check_growth.find_current_grow_ratio'].return_value = data[1]
+
+        with self.assertRaises(SystemExit):
+            check_growth.main(config_file=paths.TEST_CONFIG_FILE)
+
+        self.mocks['check_growth.find_planned_grow_ratio'].assert_called_with(1000, 2000, 365)
+        self.mocks['check_growth.find_current_grow_ratio'].assert_called_with((1212, 1232, 500, 1563),)
+
+        status, msg = self.mocks['check_growth.ScriptStatus'].update.call_args[0]
+        self.assertEqual(status, data[0])
+
+class TestOther(TestsBaseClass):
     @mock.patch('time.time')
     def test_histfile_timespan_calculation(self, TimeMock):
         conf_file = self._script_conf_factory(disk_mon_enabled=False)
@@ -454,7 +444,7 @@ class TestCheckGrowth(unittest.TestCase):
         cur_time = 1500000000
 
         # Test creating empty file and adding just one datapoint for each datatype
-        TimeMock.side_effect = lambda: cur_time
+        TimeMock.return_value = cur_time
 
         check_growth.HistoryFile.init(history_file, max_averaging_window,
                                       min_averaging_window)
@@ -466,7 +456,7 @@ class TestCheckGrowth(unittest.TestCase):
                                                data_type='space')
 
         # Now - move the clock 24h ahead:
-        TimeMock.side_effect = lambda: cur_time + 1 * 3600 * 24 + 1
+        TimeMock.return_value = cur_time + 1 * 3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 2)
         check_growth.HistoryFile.add_datapoint('disk', 2, path='/tmp/',
@@ -493,8 +483,7 @@ class TestCheckGrowth(unittest.TestCase):
             'disk', '/tmp/', 'space'), 0)
 
         # Now move the clock enough to cover min_averaging_window:
-        TimeMock.side_effect = lambda: cur_time + \
-            (0.1 + min_averaging_window) * 3600 * 24 + 1
+        TimeMock.return_value = cur_time + (0.1 + min_averaging_window) * 3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 3)
         check_growth.HistoryFile.add_datapoint('disk', 3, path='/tmp/',
@@ -527,7 +516,7 @@ class TestCheckGrowth(unittest.TestCase):
         cur_time = 1000000000
 
         # Test creating empty file and adding just one datapoint for each datatype
-        TimeMock.side_effect = lambda: cur_time
+        TimeMock.return_value = cur_time
 
         check_growth.HistoryFile.init(history_file, max_averaging_window,
                                       min_averaging_window)
@@ -541,7 +530,7 @@ class TestCheckGrowth(unittest.TestCase):
         check_growth.HistoryFile.add_datapoint('disk', 354334321, path='/tmp/',
                                                data_type='space')
 
-        TimeMock.side_effect = lambda: cur_time + max_averaging_window * \
+        TimeMock.return_value = cur_time + max_averaging_window * \
             3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 234453)
@@ -556,7 +545,7 @@ class TestCheckGrowth(unittest.TestCase):
         check_growth.HistoryFile.init(history_file, max_averaging_window,
                                       min_averaging_window)
 
-        TimeMock.side_effect = lambda: cur_time + (max_averaging_window + 1) * \
+        TimeMock.return_value = cur_time + (max_averaging_window + 1) * \
             3600 * 24
 
         check_growth.HistoryFile.add_datapoint('memory', 575553)
