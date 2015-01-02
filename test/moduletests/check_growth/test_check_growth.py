@@ -434,21 +434,29 @@ class TestScriptLogic(TestsBaseClass):
         status, msg = self.mocks['check_growth.ScriptStatus'].update.call_args[0]
         self.assertEqual(status, data[0])
 
-class TestOther(TestsBaseClass):
-    @mock.patch('time.time')
-    def test_histfile_timespan_calculation(self, TimeMock):
+class TestHistFile(TestsBaseClass):
+
+    def setUp(self):
         conf_file = self._script_conf_factory(disk_mon_enabled=False)
-        max_averaging_window = conf_file("max_averaging_window")
-        min_averaging_window = conf_file("min_averaging_window")
-        history_file = conf_file("history_file")
-        cur_time = 1500000000
+        self.max_averaging_window = conf_file("max_averaging_window")
+        self.min_averaging_window = conf_file("min_averaging_window")
+        self.history_file = conf_file("history_file")
+        self.cur_time = 1000000000
 
-        # Test creating empty file and adding just one datapoint for each datatype
-        TimeMock.return_value = cur_time
+        patcher = mock.patch('check_growth.time.time')
+        self.time_mock = patcher.start()
+        self.addCleanup(patcher.stop)
+        self.time_mock.return_value = self.cur_time
 
-        check_growth.HistoryFile.init(history_file, max_averaging_window,
-                                      min_averaging_window)
+        try:
+            os.unlink(self.history_file)
+        except FileNotFoundError:
+            pass
 
+        check_growth.HistoryFile.init(self.history_file, self.max_averaging_window,
+                                      self.min_averaging_window)
+
+    def test_histfile_timespan_calculation(self):
         check_growth.HistoryFile.add_datapoint('memory', 1)
         check_growth.HistoryFile.add_datapoint('disk', 1, path='/tmp/',
                                                data_type='inode')
@@ -456,7 +464,7 @@ class TestOther(TestsBaseClass):
                                                data_type='space')
 
         # Now - move the clock 24h ahead:
-        TimeMock.return_value = cur_time + 1 * 3600 * 24 + 1
+        self.time_mock.return_value = self.cur_time + 1 * 3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 2)
         check_growth.HistoryFile.add_datapoint('disk', 2, path='/tmp/',
@@ -482,8 +490,8 @@ class TestOther(TestsBaseClass):
         self.assertLess(check_growth.HistoryFile.verify_dataspan(
             'disk', '/tmp/', 'space'), 0)
 
-        # Now move the clock enough to cover min_averaging_window:
-        TimeMock.return_value = cur_time + (0.1 + min_averaging_window) * 3600 * 24 + 1
+        # Now move the clock enough to cover self.min_averaging_window:
+        self.time_mock.return_value = self.cur_time + (0.1 + self.min_averaging_window) * 3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 3)
         check_growth.HistoryFile.add_datapoint('disk', 3, path='/tmp/',
@@ -497,9 +505,9 @@ class TestOther(TestsBaseClass):
         dataspan_disk_s = check_growth.HistoryFile.get_dataspan(
             'disk', '/tmp/', 'space')
 
-        self.assertEqual(dataspan_memory, min_averaging_window + 0.1)
-        self.assertEqual(dataspan_disk_i, min_averaging_window + 0.1)
-        self.assertEqual(dataspan_disk_s, min_averaging_window + 0.1)
+        self.assertEqual(dataspan_memory, self.min_averaging_window + 0.1)
+        self.assertEqual(dataspan_disk_i, self.min_averaging_window + 0.1)
+        self.assertEqual(dataspan_disk_s, self.min_averaging_window + 0.1)
 
         self.assertGreater(check_growth.HistoryFile.verify_dataspan('memory'), 0)
         self.assertGreater(check_growth.HistoryFile.verify_dataspan(
@@ -507,30 +515,14 @@ class TestOther(TestsBaseClass):
         self.assertGreater(check_growth.HistoryFile.verify_dataspan(
             'disk', '/tmp/', 'space'), 0)
 
-    @mock.patch('time.time')
-    def test_histfile_workflow(self, TimeMock):
-        conf_file = self._script_conf_factory(disk_mon_enabled=False)
-        max_averaging_window = conf_file("max_averaging_window")
-        min_averaging_window = conf_file("min_averaging_window")
-        history_file = conf_file("history_file")
-        cur_time = 1000000000
-
-        # Test creating empty file and adding just one datapoint for each datatype
-        TimeMock.return_value = cur_time
-
-        check_growth.HistoryFile.init(history_file, max_averaging_window,
-                                      min_averaging_window)
-
-        # Remove old entries:
-        check_growth.HistoryFile.clear_history()
-
+    def test_histfile_load(self):
         check_growth.HistoryFile.add_datapoint('memory', 10356)
         check_growth.HistoryFile.add_datapoint('disk', 134321, path='/tmp/',
                                                data_type='inode')
         check_growth.HistoryFile.add_datapoint('disk', 354334321, path='/tmp/',
                                                data_type='space')
 
-        TimeMock.return_value = cur_time + max_averaging_window * \
+        self.time_mock.return_value = self.cur_time + self.max_averaging_window * \
             3600 * 24 + 1
 
         check_growth.HistoryFile.add_datapoint('memory', 234453)
@@ -542,10 +534,10 @@ class TestOther(TestsBaseClass):
         check_growth.HistoryFile.save()
 
         # Test reading existing file and adding few more points:
-        check_growth.HistoryFile.init(history_file, max_averaging_window,
-                                      min_averaging_window)
+        check_growth.HistoryFile.init(self.history_file, self.max_averaging_window,
+                                      self.min_averaging_window)
 
-        TimeMock.return_value = cur_time + (max_averaging_window + 1) * \
+        self.time_mock.return_value = self.cur_time + (self.max_averaging_window + 1) * \
             3600 * 24
 
         check_growth.HistoryFile.add_datapoint('memory', 575553)
@@ -569,8 +561,6 @@ class TestOther(TestsBaseClass):
                          {1001296000: 652314121, 1001209601: 654334321})
         self.assertEqual(disk_data_inode,
                          {1001296000: 234234367, 1001209601: 234321})
-
-        check_growth.HistoryFile.save()
 
 
 if __name__ == '__main__':
