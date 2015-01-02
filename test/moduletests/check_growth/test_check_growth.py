@@ -450,7 +450,7 @@ class TestHistFile(TestsBaseClass):
 
         try:
             os.unlink(self.history_file)
-        except FileNotFoundError:
+        except (OSError, IOError):
             pass
 
         check_growth.HistoryFile.init(self.history_file, self.max_averaging_window,
