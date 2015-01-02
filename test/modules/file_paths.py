@@ -20,14 +20,17 @@ _module_dir = op.dirname(op.realpath(__file__))
 _main_dir = op.abspath(op.join(_module_dir, '..'))
 _fabric_base_dir = op.join(_main_dir, 'fabric/')
 
-#Test mountpoint location:
+# Test mountpoint location:
 MOUNTPOINT_DIRS = ['/dev/shm/', '/tmp']
 
-#Configfile location
+# Configfile location
 TEST_CONFIG_FILE = op.join(_fabric_base_dir, 'check_growth-mopconfig.yml')
 
-#Test lockfile location:
+# Test lockfile location:
 TEST_LOCKFILE = op.join(_fabric_base_dir, 'filelock.pid')
 
-#Test historyfile location
+# Test historyfile location
 TEST_STATUSFILE = op.join(_fabric_base_dir, 'check_growth.status.yml')
+
+# Test /proc/meminfo file:
+TEST_MEMINFO = op.join(_fabric_base_dir, 'meminfo.out')

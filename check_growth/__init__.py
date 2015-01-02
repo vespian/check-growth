@@ -22,7 +22,6 @@ import logging
 import logging.handlers as lh
 import numpy
 import os
-import psutil
 import sys
 import time
 import yaml
@@ -241,9 +240,25 @@ def fetch_memory_usage():
     Returns:
     A tuple: (memory used, memory total), in megabytes.
     """
-    vmem = psutil.virtual_memory()
-    return round((vmem[0]-vmem[1])/1024**2, 2), round(vmem[0]/1024**2, 2)
+    # Calculation based on 'free' source:
+    # used = MemTotal - MemFree - Cached - Slab - Buffers
+    # total = MemTotal
+    with open('/proc/meminfo', 'r') as fh:
+        data = fh.read()
+    used = 0
+    total = 0
+    # Using fh.readlines() would be more convinient but it makes testing difficult
+    for line in data.split('\n'):
+        if line == '':
+            continue
+        tmp = line.split()
+        if tmp[0][:-1] in ['MemFree', 'Cached', 'Slab', 'Buffers']:
+            used -= int(tmp[1])
+        elif tmp[0][:-1] == 'MemTotal':
+            used += int(tmp[1])
+            total = int(tmp[1])
 
+    return round(used/1024, 2), round(total/1024, 2)
 
 def fetch_disk_usage(mountpoint):
     """

@@ -13,7 +13,6 @@ In order to run check_growth you need to following dependencies installed:
 - pymisc (https://github.com/vespian/pymisc)
 - python >=3.2 (not tested on earlier versions)
 - python3-numpy
-- python3-psutil
 - python3-yaml
 
 You can also use debian packaging rules from debian/ directory to build a deb

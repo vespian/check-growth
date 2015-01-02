@@ -280,24 +280,16 @@ class TestCheckGrowth(unittest.TestCase):
             self.assertEqual(status, 'ok')
 
     def test_memusage_fetch(self):
-        cur_mem, max_mem = check_growth.fetch_memory_usage()
 
-        cur_mem = int(cur_mem)
-        max_mem = int(max_mem)
+        with open(paths.TEST_MEMINFO, 'r') as fh:
+            tmp = fh.read()
 
-        output = subprocess.check_output(['/usr/bin/free', '-m'], shell=False,
-                                         universal_newlines=True).split('\n')
+        m = mock.mock_open(read_data = tmp)
+        with mock.patch('check_growth.open', m, create=True):
+            cur_mem, max_mem = check_growth.fetch_memory_usage()
 
-        correct_maxmem = int(output[1].split()[1])
-        correct_curmem = int(output[1].split()[2])
-
-        diff_max = abs(correct_maxmem - max_mem)
-        diff_cur = abs(correct_curmem - cur_mem)
-
-        # Rounding problems and usage variations over time - so lets make 20% of
-        # effort, and get 80 of errors detected :D
-        self.assertLessEqual(diff_max, 15)
-        self.assertLessEqual(diff_cur, 15)
+        self.assertLessEqual(cur_mem, 3808.93)
+        self.assertLessEqual(max_mem, 24058.3)
 
     def test_inodeusage_fetch(self):
         cur_inode, max_inode = check_growth.fetch_inode_usage(
