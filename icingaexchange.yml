@@ -1,0 +1,16 @@
+name: check-growth
+description: "file:///README.md"
+url: "https://github.com/vespian/check-growth"
+tags: growth,capacity-planning,memory,disk
+vendor: Linux
+target: Website,Service
+type: Plugin
+license: Apache 2.0
+releases:
+    - name: 1.2.0
+      description: "All the features implemented and unittested."
+      files:
+         - name: 1.2.0.tar.gz
+           description: plugin tarbal
+           url: "https://github.com/vespian/check-growth/archive/1.2.0.tar.gz"
+           checksum: af0f8ea313009b8a981fd18741ec3ab4
